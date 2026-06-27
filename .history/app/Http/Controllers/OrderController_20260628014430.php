@@ -33,10 +33,12 @@ class OrderController extends Controller
 
     public function store(Request $request)
     {
+
         $validator = Validator::make($request->all(), [
-            'products'                 => 'required|array|min:1',
-            'products.*.product_id'   => 'required|exists:products,id',
-            'products.*.quantity'     => 'required|integer|min:1',
+            'payment_method' => 'required|string|in:stripe,paypal,fawry,cod',
+            'products' => 'required|array|min:1',
+            'products.*.product_id' => 'required|exists:products,id',
+            'products.*.quantity' => 'required|integer|min:1',
         ]);
 
         if ($validator->fails()) {
@@ -47,15 +49,14 @@ class OrderController extends Controller
 
         try {
             $totalAmount = 0;
-            $orderItems  = [];
+            $orderItems = [];
 
             foreach ($request->products as $item) {
                 $product = Product::find($item['product_id']);
 
                 if ($product->stock < $item['quantity']) {
-                    DB::rollBack();
                     return response()->json([
-                        'error' => "Not enough stock for ({$product->name}). Available: {$product->stock}"
+                        'error' => "The quantity of the product ({$product->name}) is not available. Available: {$product->stock}"
                     ], 400);
                 }
 
@@ -63,62 +64,37 @@ class OrderController extends Controller
 
                 $orderItems[$product->id] = [
                     'quantity' => $item['quantity'],
-                    'price'    => $product->price,
+                    'price' => $product->price
                 ];
 
                 $product->decrement('stock', $item['quantity']);
             }
 
             $order = Order::create([
-                'user_id'      => auth('api')->id(),
+                'user_id' => auth('api')->id(),
                 'total_amount' => $totalAmount,
-                'status'       => 'pending',
+                'status' => 'pending',
+                'payment_method' => $request->payment_method,
+                'payment_status' => 'pending',
             ]);
 
             $order->products()->attach($orderItems);
+
+            $paymentResponse = $this->handlePayment($order, $request->payment_method);
 
             DB::commit();
 
             return response()->json([
                 'message' => 'Order created successfully',
-                'order'   => $order->load('products'),
+                'order' => $order->load('products'),
+                'payment_info' => $paymentResponse
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json([
-                'error'   => 'An error occurred while creating the order',
-                'details' => $e->getMessage(),
-            ], 500);
+            return response()->json(['error' => 'An error occurred while processing the order', 'details' => $e->getMessage()], 500);
         }
     }
 
-    public function update(Request $request, $id)
-    {
-        $order = Order::find($id);
-
-        if (!$order) {
-            return response()->json(['error' => 'Order not found'], 404);
-        }
-
-        if ($order->user_id !== auth('api')->id()) {
-            return response()->json(['error' => 'Unauthorized'], 403);
-        }
-
-        $validator = Validator::make($request->all(), [
-            'status' => 'required|string|in:pending,confirmed,cancelled',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
-
-        $order->update(['status' => $request->status]);
-
-        return response()->json([
-            'message' => 'Order updated successfully',
-            'order'   => $order->fresh('products'),
-        ], 200);
-    }
 
     public function show($id)
     {
@@ -148,12 +124,6 @@ class OrderController extends Controller
             return response()->json(['error' => 'You are not authorized to delete this order'], 403);
         }
 
-        if ($order->hasPayments()) {
-            return response()->json([
-                'error' => 'Cannot delete order because it has associated payments.'
-            ], 422);
-        }
-
         DB::beginTransaction();
 
         try {
@@ -170,6 +140,23 @@ class OrderController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['error' => 'An error occurred while deleting the order', 'details' => $e->getMessage()], 500);
+        }
+    }
+
+    private function handlePayment(Order $order, $method)
+    {
+        switch ($method) {
+            case 'stripe':
+                return ['redirect_url' => 'https://checkout.stripe.com/pay/...'];
+
+            case 'fawry':
+                return ['fawry_code' => '9988776655'];
+
+            case 'cod':
+                return ['message' => 'Payment on delivery'];
+
+            default:
+                return null;
         }
     }
 }

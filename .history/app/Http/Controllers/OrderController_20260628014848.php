@@ -92,34 +92,6 @@ class OrderController extends Controller
         }
     }
 
-    public function update(Request $request, $id)
-    {
-        $order = Order::find($id);
-
-        if (!$order) {
-            return response()->json(['error' => 'Order not found'], 404);
-        }
-
-        if ($order->user_id !== auth('api')->id()) {
-            return response()->json(['error' => 'Unauthorized'], 403);
-        }
-
-        $validator = Validator::make($request->all(), [
-            'status' => 'required|string|in:pending,confirmed,cancelled',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
-
-        $order->update(['status' => $request->status]);
-
-        return response()->json([
-            'message' => 'Order updated successfully',
-            'order'   => $order->fresh('products'),
-        ], 200);
-    }
-
     public function show($id)
     {
         $order = Order::with('products')->where('id', $id)->first();
@@ -170,6 +142,23 @@ class OrderController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['error' => 'An error occurred while deleting the order', 'details' => $e->getMessage()], 500);
+        }
+    }
+
+    private function handlePayment(Order $order, $method)
+    {
+        switch ($method) {
+            case 'stripe':
+                return ['redirect_url' => 'https://checkout.stripe.com/pay/...'];
+
+            case 'fawry':
+                return ['fawry_code' => '9988776655'];
+
+            case 'cod':
+                return ['message' => 'Payment on delivery'];
+
+            default:
+                return null;
         }
     }
 }

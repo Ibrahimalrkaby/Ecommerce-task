@@ -172,4 +172,21 @@ class OrderController extends Controller
             return response()->json(['error' => 'An error occurred while deleting the order', 'details' => $e->getMessage()], 500);
         }
     }
+
+    private function handlePayment(Order $order, $method)
+    {
+        switch ($method) {
+            case 'stripe':
+                return ['redirect_url' => 'https://checkout.stripe.com/pay/...'];
+
+            case 'fawry':
+                return ['fawry_code' => '9988776655'];
+
+            case 'cod':
+                return ['message' => 'Payment on delivery'];
+
+            default:
+                return null;
+        }
+    }
 }
