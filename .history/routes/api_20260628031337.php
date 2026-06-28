@@ -62,9 +62,10 @@ Route::group(['middleware' => ['auth:api']], function () {
 
 
 Route::prefix('v1')->middleware(['auth:api'])->group(function () {
-    Route::get('payments/gateways', [PaymentController::class, 'gateways']);
+
     Route::post('payments', [PaymentController::class, 'store']);
     Route::get('payments', [PaymentController::class, 'index']);
     Route::get('payments/{paymentId}', [PaymentController::class, 'show']);
+    Route::get('payments/gateways', [PaymentController::class, 'gateways']);
     Route::get('orders/{orderId}/payments', [PaymentController::class, 'byOrder']);
 });

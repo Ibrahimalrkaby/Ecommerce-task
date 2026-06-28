@@ -67,11 +67,24 @@ class AdminAuthController extends Controller
         ]);
     }
 
+    public function me()
+    {
+        return response()->json(auth('admin')->user());
+    }
 
     public function logout()
     {
         auth('admin')->logout();
 
         return response()->json(['message' => 'Successfully logged out']);
+    }
+
+    public function refresh()
+    {
+        return response()->json([
+            'access_token' => auth('admin')->refresh(),
+            'token_type' => 'bearer',
+            'expires_in' => auth('admin')->factory()->getTTL() * 60,
+        ]);
     }
 }
